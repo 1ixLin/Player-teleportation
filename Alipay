@@ -1,0 +1,155 @@
+local Players = game:GetService("Players")
+local localPlayer = Players.LocalPlayer
+
+-- Create a ScreenGui
+local screenGui = Instance.new("ScreenGui")
+screenGui.Parent = localPlayer:WaitForChild("PlayerGui")
+
+-- Function to create UI circles
+local function createCircle(size, position, color, text, placeholderText)
+    local circle = Instance.new("TextBox")
+    circle.Size = size
+    circle.Position = position
+    circle.BackgroundColor3 = color
+    circle.Text = text
+    circle.TextScaled = true
+    circle.TextWrapped = true
+    circle.PlaceholderText = placeholderText
+    circle.Parent = screenGui
+    
+    local uiCorner = Instance.new("UICorner")
+    uiCorner.CornerRadius = UDim.new(0.5, 0)
+    uiCorner.Parent = circle
+    
+    return circle
+end
+
+-- Create the bottom (green) circle
+local bottomCircle = createCircle(UDim2.new(0, 100, 0, 100), UDim2.new(1, -120, 0.5, 60), Color3.fromRGB(0, 255, 0), "", "Username")
+
+-- Create the top (white) circle as a button
+local topCircle = Instance.new("TextButton")
+topCircle.Size = UDim2.new(0, 100, 0, 100)
+topCircle.Position = UDim2.new(1, -120, 0.5, -160)
+topCircle.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+topCircle.Text = "TP"
+topCircle.TextScaled = true
+topCircle.TextWrapped = true
+topCircle.Parent = screenGui
+
+local topCircleUICorner = Instance.new("UICorner")
+topCircleUICorner.CornerRadius = UDim.new(0.5, 0)
+topCircleUICorner.Parent = topCircle
+
+-- Feedback label
+local feedbackLabel = Instance.new("TextLabel")
+feedbackLabel.Size = UDim2.new(0, 400, 0, 50)
+feedbackLabel.Position = UDim2.new(0.5, -200, 0, 10)
+feedbackLabel.BackgroundTransparency = 1
+feedbackLabel.Text = ""
+feedbackLabel.TextColor3 = Color3.fromRGB(255, 0, 0)
+feedbackLabel.TextScaled = true
+feedbackLabel.Parent = screenGui
+
+-- Find the closest matching player by partial username (case-insensitive)
+local function findClosestMatchingPlayer(partialUsername)
+    partialUsername = partialUsername:lower()
+    local bestMatch = nil
+    local bestMatchLength = math.huge
+
+    for _, player in ipairs(Players:GetPlayers()) do
+        local playerName = player.Name:lower()
+        if playerName:find(partialUsername) == 1 and #playerName < bestMatchLength then
+            bestMatch = player
+            bestMatchLength = #playerName
+        end
+    end
+
+    return bestMatch
+end
+
+-- Teleport function
+local function teleportToPlayer(partialUsername)
+    local targetPlayer = findClosestMatchingPlayer(partialUsername)
+    if targetPlayer and targetPlayer.Character and targetPlayer.Character:FindFirstChild("HumanoidRootPart") then
+        local targetHRP = targetPlayer.Character.HumanoidRootPart
+        local localHRP = localPlayer.Character and localPlayer.Character:FindFirstChild("HumanoidRootPart")
+        if localHRP then
+            -- Calculate position behind the target player
+            local newPosition = targetHRP.Position - targetHRP.CFrame.LookVector * 0.5
+            localHRP.CFrame = CFrame.new(newPosition, targetHRP.Position)
+            feedbackLabel.Text = "Teleported to " .. targetPlayer.Name
+            feedbackLabel.TextColor3 = Color3.fromRGB(0, 255, 0)
+        end
+    else
+        feedbackLabel.Text = "Player not found or not in the game"
+        feedbackLabel.TextColor3 = Color3.fromRGB(255, 0, 0)
+    end
+end
+
+-- Connect the top circle click event
+topCircle.MouseButton1Click:Connect(function()
+    local partialUsername = bottomCircle.Text
+    if partialUsername and partialUsername ~= "" then
+        teleportToPlayer(partialUsername)
+    else
+        feedbackLabel.Text = "Please enter a username"
+        feedbackLabel.TextColor3 = Color3.fromRGB(255, 0, 0)
+    end
+end)
+
+-- Enable dragging functionality
+local dragging = false
+local clickCount = 0
+
+local function enableDragging(guiObject)
+    local draggingInput
+    local dragStart
+    local startPos
+
+    local function update(input)
+        local delta = input.Position - dragStart
+        guiObject.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+    end
+
+    guiObject.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            dragStart = input.Position
+            startPos = guiObject.Position
+            draggingInput = input
+            input.Changed:Connect(function()
+                if input.UserInputState == Enum.UserInputState.End then
+                    dragging = false
+                end
+            end)
+        end
+    end)
+
+    guiObject.InputChanged:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+            draggingInput = input
+        end
+    end)
+
+    game:GetService("UserInputService").InputChanged:Connect(function(input)
+        if input == draggingInput and dragging then
+            update(input)
+        end
+    end)
+end
+
+local function toggleDragging()
+    clickCount = clickCount + 1
+    if clickCount == 4 then
+        dragging = not dragging
+        clickCount = 0
+        feedbackLabel.Text = dragging and "Dragging enabled" or "Dragging disabled"
+        feedbackLabel.TextColor3 = dragging and Color3.fromRGB(0, 255, 0) or Color3.fromRGB(255, 0, 0)
+    end
+end
+
+bottomCircle.MouseButton1Click:Connect(toggleDragging)
+topCircle.MouseButton1Click:Connect(toggleDragging)
+
+enableDragging(bottomCircle)
+enableDragging(topCircle)
